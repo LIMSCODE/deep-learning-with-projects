@@ -1,7 +1,30 @@
 #!/usr/bin/env python
 # coding: utf-8
+## # 국민청원 분류하기 - 주목받을만한글 분류 
+- 높은 청원참여인원을 기록한 글들의 특징을 학습하여, 그 글들과 유사성을 계산하여 주목받을만한 글인지 판단 
+- 청원참여인원이 1천명 넘을것으로 분류된 청원을 결과로 찾음
 
-# # 2.1 크롤링
+## # 과정
+- 크롤링 (제목,참여인원,카테고리,청원시작,마감일,청원내용)
+- 데이터전처리 (공백,특수문자제거)
+
+- 토크나이징
+Konlpy - 형태소분석패키지 , Okt클래스 선정, 제목을 형태소단위로 토크나이징(좋,습니다), 내용을 명사단위로 토크나이징하여 df에저장
+df_drop - 분석에필요한 df[final]과 label
+
+- 변수생성
+청원참여인원이 1천명이상이면 LABEL에 YES붙임, 아니면 NO붙임
+
+- 단어임베딩 (Word2Vec)  (국민청원 10881건에대한 토큰43937개의 100차원임베딩)
+문자를 숫자롭 변환하여 컴퓨터가 이해하도록 처리
+토큰에인덱스부여하는방법-단어토큰을 숫자로치환한것뿐이므로 토큰간 의미,유사도 파악이어려움/ One-Hot Encoding -성능안좋음
+Word2Vec 
+- 단어의 의미,유사도반영하여 벡터로 표현 / 특정토큰 근처의 토큰들을 비슷한 위치의 벡터로 표현한다.
+- df[total_token]에서 embedding_model불러옴 / embedding_model.wv.most_similar("음주운전") 으로 유사값 찾음
+
+- 실험설계 (학습,평가)
+    
+# # 2.1 크롤링  (제목,참여인원,카테고리,청원시작,마감일,청원내용)
 # [크롤링]
 # In[ ]:
 import pandas as pd
@@ -48,11 +71,9 @@ for i in range(584274, 595226):
               +",  Data Length:"+ str(len(result)))        
         time.sleep(90) 
 
-
 # [크롤링 데이터 확인]
 # In[ ]:
 print(result.shape)
-
 df = result
 df.head()
 
@@ -61,7 +82,7 @@ df.head()
 df.to_csv('data/crawling.csv', index = False, encoding = 'utf-8-sig')
 
 
-# # 2.2 데이터 전처리
+# # 2.2 데이터 전처리 (공백,특수문자제거)
 # In[ ]:
 df.loc[1]['content']  # 전처리 전
 # [전처리]
@@ -87,13 +108,16 @@ df.loc[1]['content']  # 전처리 후
 
 # # 2.3 토크나이징 및 변수 생성
 # [토크나이징]
+- Konlpy - 형태소분석패키지 , Okt클래스 선정, 제목을 형태소단위로 토크나이징(좋,습니다), 내용을 명사단위로 토크나이징하여 df에저장
+- df_drop - 분석에필요한 df[final]과 label 만 가져옴
+
 # In[ ]:
 from konlpy.tag import Okt
 okt = Okt()
 df['title_token'] = df.title.apply(okt.morphs)
 df['content_token'] = df.content.apply(okt.nouns)
 
-# [파생변수 생성]
+# [파생변수 생성] - 변수생성
 # In[ ]:
 df['token_final'] = df.title_token + df.content_token
 df['count'] = df['count'].replace({',' : ''}, regex = True).apply(lambda x : int(x))
@@ -108,9 +132,16 @@ df_drop.head()
 # In[11]:
 df_drop.to_csv('data/df_drop.csv', index = False, encoding = 'utf-8-sig')
 
-# # 2.4 단어 임베딩
-# [단어 임베딩]
+
+# # 2.4 단어 임베딩 -Word2Vec 이용하여 문자를 숫자벡터로 변환
+# [단어 임베딩]  (국민청원 10881건에대한 토큰43937개의 100차원임베딩)
 # In[ ]:
+- 문자를 숫자로 변환하여 컴퓨터가 이해하도록 처리
+- 토큰에 인덱스 부여하는 방법-단어토큰을 숫자로치환한것뿐이므로 토큰간 의미,유사도 파악이어려움/ One-Hot Encoding -성능안좋음
+- Word2Vec 
+- 단어의 의미,유사도반영하여 벡터로 표현 / 특정토큰 근처의 토큰들을 비슷한 위치의 벡터로 표현한다.
+- df[total_token]에서 embedding_model불러옴 / embedding_model.wv.most_similar("음주운전") 으로 유사값 찾음
+
 from gensim.models import Word2Vec
 
 embedding_model = Word2Vec(df_drop['token_final'], 
@@ -120,21 +151,19 @@ embedding_model = Word2Vec(df_drop['token_final'],
                            min_count = 1, 
                            workers = 4
                            )
-
 print(embedding_model)
-
 model_result = embedding_model.wv.most_similar("음주운전")
 print(model_result)
 
 # [임베딩 모델 저장 및 로드]
 # In[ ]:
 from gensim.models import KeyedVectors
-
 embedding_model.wv.save_word2vec_format('data/petitions_tokens_w2v') # 모델 저장
 loaded_model = KeyedVectors.load_word2vec_format('data/petitions_tokens_w2v') # 모델 로드
 
 model_result = loaded_model.most_similar("음주운전")
 print(model_result)
+
 
 # # 2.5 실험 설계
 # [데이터셋 분할 및 저장]
