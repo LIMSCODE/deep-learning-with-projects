@@ -169,10 +169,8 @@ print(model_result)
 # [데이터셋 분할 및 저장]
 # In[ ]:
 from numpy.random import RandomState
-
 rng = RandomState()
-
-tr = df_drop.sample(frac=0.8, random_state=rng)
+tr = df_drop.sample(frac=0.8, random_state=rng)        //데이터를 tran, validation set으로 랜덤하게 분할한다. 전체데이터의 80%를 train set으로 지정, 20%를 validation set으로 지정
 val = df_drop.loc[~df_drop.index.isin(tr.index)]
 
 tr.to_csv('data/train.csv', index=False, encoding='utf-8-sig')
@@ -184,13 +182,13 @@ val.to_csv('data/validation.csv', index=False, encoding='utf-8-sig')
 import torchtext
 from torchtext.data import Field
 
-def tokenizer(text):
+def tokenizer(text):            //토크나이저
     text = re.sub('[\[\]\']', '', str(text))
     text = text.split(', ')
     return text
 
-TEXT = Field(tokenize=tokenizer)
-LABEL = Field(sequential = False)
+TEXT = Field(tokenize=tokenizer)    //field클래스는 토크나이징, 단어장생성 등을 지원.
+LABEL = Field(sequential = False)    //순서가있는데이터인지 
 
 
 # [데이터 불러오기]
@@ -217,21 +215,17 @@ from torchtext.vocab import Vectors
 from torchtext.data import BucketIterator
 
 vectors = Vectors(name="data/petitions_tokens_w2v")
-
-TEXT.build_vocab(train, vectors = vectors, min_freq = 1, max_size = None)
-LABEL.build_vocab(train)
+TEXT.build_vocab(train, vectors = vectors, min_freq = 1, max_size = None)    // petition_token_w2v 임베딩벡터를 저장
+LABEL.build_vocab(train)                //train 데이터의 단어장(Vocab)을 생성한다.
 
 vocab = TEXT.vocab
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-train_iter, validation_iter = BucketIterator.splits(
+train_iter, validation_iter = BucketIterator.splits(        //train,validationset 을 지정한 배치사이즈만큼 로드하여 배치데이터생성함
     datasets = (train, validation),
     batch_size = 8,
     device = device,
     sort = False
 )
-
 print('임베딩 벡터의 개수와 차원 : {} '.format(TEXT.vocab.vectors.shape))
 
 
