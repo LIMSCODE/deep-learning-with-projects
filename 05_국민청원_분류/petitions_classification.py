@@ -2,18 +2,13 @@
 # coding: utf-8
 
 # # 2.1 크롤링
-
 # [크롤링]
-
 # In[ ]:
-
-
 import pandas as pd
 import numpy as np
 import requests
 from bs4 import BeautifulSoup 
 import time
-
 
 result = pd.DataFrame()                                    
 
@@ -55,37 +50,22 @@ for i in range(584274, 595226):
 
 
 # [크롤링 데이터 확인]
-
 # In[ ]:
-
-
 print(result.shape)
 
 df = result
 df.head()
 
-
 # [데이터 엑셀로 저장]
-
 # In[37]:
-
-
 df.to_csv('data/crawling.csv', index = False, encoding = 'utf-8-sig')
 
 
 # # 2.2 데이터 전처리
-
 # In[ ]:
-
-
 df.loc[1]['content']  # 전처리 전
-
-
 # [전처리]
-
 # In[ ]:
-
-
 import re
 
 def remove_white_space(text):
@@ -102,69 +82,35 @@ df.title = df.title.apply(remove_special_char)
 df.content = df.content.apply(remove_white_space)
 df.content = df.content.apply(remove_special_char)
 
-
 # In[ ]:
-
-
 df.loc[1]['content']  # 전처리 후
 
-
 # # 2.3 토크나이징 및 변수 생성
-
 # [토크나이징]
-
 # In[ ]:
-
-
 from konlpy.tag import Okt
-
 okt = Okt()
-
 df['title_token'] = df.title.apply(okt.morphs)
 df['content_token'] = df.content.apply(okt.nouns)
 
-
 # [파생변수 생성]
-
 # In[ ]:
-
-
 df['token_final'] = df.title_token + df.content_token
-
 df['count'] = df['count'].replace({',' : ''}, regex = True).apply(lambda x : int(x))
-
 print(df.dtypes)
-
 df['label'] = df['count'].apply(lambda x: 'Yes' if x>=1000 else 'No')
 
-
 # In[ ]:
-
-
 df_drop = df[['token_final', 'label']]
-
-
 # In[ ]:
-
-
 df_drop.head()
-
-
 # [데이터 엑셀로 저장]
-
 # In[11]:
-
-
 df_drop.to_csv('data/df_drop.csv', index = False, encoding = 'utf-8-sig')
 
-
 # # 2.4 단어 임베딩
-
 # [단어 임베딩]
-
 # In[ ]:
-
-
 from gensim.models import Word2Vec
 
 embedding_model = Word2Vec(df_drop['token_final'], 
@@ -180,12 +126,8 @@ print(embedding_model)
 model_result = embedding_model.wv.most_similar("음주운전")
 print(model_result)
 
-
 # [임베딩 모델 저장 및 로드]
-
 # In[ ]:
-
-
 from gensim.models import KeyedVectors
 
 embedding_model.wv.save_word2vec_format('data/petitions_tokens_w2v') # 모델 저장
@@ -194,14 +136,9 @@ loaded_model = KeyedVectors.load_word2vec_format('data/petitions_tokens_w2v') # 
 model_result = loaded_model.most_similar("음주운전")
 print(model_result)
 
-
 # # 2.5 실험 설계
-
 # [데이터셋 분할 및 저장]
-
 # In[ ]:
-
-
 from numpy.random import RandomState
 
 rng = RandomState()
@@ -214,10 +151,7 @@ val.to_csv('data/validation.csv', index=False, encoding='utf-8-sig')
 
 
 # [Field클래스 정의]
-
 # In[ ]:
-
-
 import torchtext
 from torchtext.data import Field
 
@@ -231,10 +165,7 @@ LABEL = Field(sequential = False)
 
 
 # [데이터 불러오기]
-
 # In[ ]:
-
-
 from torchtext.data import TabularDataset
 
 train, validation = TabularDataset.splits(
@@ -251,10 +182,7 @@ print("Validation:", validation[0].text, validation[0].label)
 
 
 # [단어장 및 DataLoader 정의]
-
 # In[ ]:
-
-
 import torch
 from torchtext.vocab import Vectors
 from torchtext.data import BucketIterator
@@ -319,31 +247,30 @@ def train(model, device, train_itr, optimizer):
     for batch in train_itr:
         
         text, target = batch.text, batch.label      
-        text = torch.transpose(text, 0, 1)          
-        target.data.sub_(1)                                 
-        text, target = text.to(device), target.to(device)  
+        text = torch.transpose(text, 0, 1)              //연산을위해 텍스트데이터를 역행렬로 변환
+        target.data.sub_(1)                             //target의 값을 1씩줄임    
+        text, target = text.to(device), target.to(device)  //모델을 학습시키고자 장비에 할당
 
-        optimizer.zero_grad()                           
-        logit = model(text)                         
+        optimizer.zero_grad()                           //gradient초기화
+        logit = model(text)                             //텍스트데이터를 textCNN의 input으로 이용해 Output계산
     
-        loss = F.cross_entropy(logit, target)   
-        loss.backward()  
-        optimizer.step()  
+        loss = F.cross_entropy(logit, target)           //CNN 모델에서 리턴받은 logit값에 softmax 함수를 통과시켜 yes,no로 분류
+        loss.backward()                                  //예측값과 실제레이블데이터 비교하여 Negative Log Loss값 계산
+        optimizer.step()                                  //Softmax, Negative Log Loss값은 torch.nn.functional모듈의 cross_entropy 로 동시에연산
         
         train_loss += loss.item()    
         result = torch.max(logit,1)[1] 
-        corrects += (result.view(target.size()).data == target.data).sum()
+        corrects += (result.view(target.size()).data == target.data).sum()    //TextCNN 모델의 예측값과 레이블데이터 비교후 맞으면 더함
         
     train_loss /= len(train_itr.dataset)
     accuracy = 100.0 * corrects / len(train_itr.dataset)
 
-    return train_loss, accuracy
+    return train_loss, accuracy                    //오차, 정확도 반환
 
 
 # [모델 평가 함수 정의]
 # In[ ]:
 def evaluate(model, device, itr):
-    
     model.eval()
     corrects, test_loss = 0.0, 0
 
@@ -373,17 +300,16 @@ model = TextCNN(vocab, 100, 10, [3, 4, 5], 2).to(device)
 print(model)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 best_test_acc = -1
 
 for epoch in range(1, 3+1):
  
-    tr_loss, tr_acc = train(model, device, train_iter, optimizer) 
+    tr_loss, tr_acc = train(model, device, train_iter, optimizer)  //설정값으로 학습후 오차, 정확도 반환
     print('Train Epoch: {} \t Loss: {} \t Accuracy: {}%'.format(epoch, tr_loss, tr_acc))
     
-    val_loss, val_acc = evaluate(model, device, validation_iter)
+    val_loss, val_acc = evaluate(model, device, validation_iter)    //평가후 오차, 정확도 반환
     print('Valid Epoch: {} \t Loss: {} \t Accuracy: {}%'.format(epoch, val_loss, val_acc))
         
     if val_acc > best_test_acc:
