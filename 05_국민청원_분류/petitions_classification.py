@@ -139,6 +139,8 @@ model_result = loaded_model.most_similar("음주운전")
 print(model_result)
 -> [('음주',0.86), ('무면허', 0.81) ,...]
 
+
+
 //여기까지가 크롤링,전처리하여 공백,특수문자없앰,형태소 토크나이징, 단어 임베딩-Word2Vec 이용하여 문자를 숫자벡터로 변환 ###
 //============================================================================
 # # 2.5 실험 설계
@@ -150,7 +152,6 @@ tr = df_drop.sample(frac=0.8, random_state=rng)        //데이터를 tran, vali
 val = df_drop.loc[~df_drop.index.isin(tr.index)]
 tr.to_csv('data/train.csv', index=False, encoding='utf-8-sig')        //csv로 tran, validation set 저장 
 val.to_csv('data/validation.csv', index=False, encoding='utf-8-sig')
-
 # [Field클래스 정의]
 # In[ ]:
 import torchtext
@@ -161,11 +162,10 @@ def tokenizer(text):            //토크나이저
     return text
 TEXT = Field(tokenize=tokenizer)    //field클래스는 토크나이징, 단어장생성 등을 지원.
 LABEL = Field(sequential = False)    //순서가있는데이터인지 
-
 # [csv에서 데이터 불러오기]
 # In[ ]:
 from torchtext.data import TabularDataset
-train, validation = TabularDataset.splits(
+train, validation = TabularDataset.splits(            // ### 저장된 csv에서 df_drop을 train, validation으로 나눠 가져옴
     path = 'data/',
     train = 'train.csv',
     validation = 'validation.csv',
@@ -176,18 +176,18 @@ train, validation = TabularDataset.splits(
 print("Train:", train[0].text,  train[0].label)
 print("Validation:", validation[0].text, validation[0].label)
 
-# [단어장 및 DataLoader 정의] - 임베딩벡터를 가져와 train_iter, validation_iter를 만듬
+# [단어장 및 DataLoader 정의] - 임베딩벡터를 가져와 train_iter, validation_iter를 만듬 ### 
 # In[ ]:
 import torch
 from torchtext.vocab import Vectors
 from torchtext.data import BucketIterator
 vectors = Vectors(name="data/petitions_tokens_w2v")
-TEXT.build_vocab(train, vectors = vectors, min_freq = 1, max_size = None)    // petition_token_w2v 임베딩벡터를 저장
-LABEL.build_vocab(train)                //train 데이터의 단어장(Vocab)을 생성한다.
+TEXT.build_vocab(train, vectors = vectors, min_freq = 1, max_size = None)    // petition_token_w2v파일을 불러와 임베딩벡터를 저장
+LABEL.build_vocab(train)                                                     // train 데이터의 단어장(Vocab)을 생성한다.
 vocab = TEXT.vocab
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-train_iter, validation_iter = BucketIterator.splits(        //train,validationset 을 지정한 배치사이즈만큼 로드하여 배치데이터생성함
-    datasets = (train, validation),
+train_iter, validation_iter = BucketIterator.splits(                         
+    datasets = (train, validation),                                          //### 위에서 저장한 df_drop을 train,validation으로 나눈것을 배치사이즈만큼 로드하여 배치데이터생성함
     batch_size = 8,
     device = device,
     sort = False
@@ -195,16 +195,16 @@ train_iter, validation_iter = BucketIterator.splits(        //train,validationse
 print('임베딩 벡터의 개수와 차원 : {} '.format(TEXT.vocab.vectors.shape))
 
 
-# # 2.6 TextCNN  - 단어장 임베딩, 필터통과시켜 피처맵만듬, 풀링레이어생성, logit값반환
+# # 2.6 TextCNN  - 단어장을 임베딩시킴, 필터통과시켜 피처맵만듬, 풀링레이어생성, 생성된 풀링레이어를 fc함수에 넣어 logit값반환 ###
 # [TextCNN 모델링]
 # In[ ]:
 import torch.nn as nn   
 import torch.optim as optim 
 import torch.nn.functional as F 
 class TextCNN(nn.Module):  // ### 
-    def __init__(self, vocab_built, emb_dim, dim_channel, kernel_wins, num_class):   // ### vocab_built부터 train데이터로 생성한 단어장, 임베딩벡터의크기, 피처맵이후 생성되는 채널의수, 필터의크기, output클래스의개수        
+    def __init__(self, vocab_built, emb_dim, dim_channel, kernel_wins, num_class):   // ### vocab_built- train데이터로 생성한 단어장, 임베딩벡터의크기, 피처맵이후 생성되는 채널의수, 필터의크기, output클래스의개수        
         super(TextCNN, self).__init__()
-        self.embed = nn.Embedding(len(vocab_built), emb_dim)                                           //### 단어장을 임베딩한다
+        self.embed = nn.Embedding(len(vocab_built), emb_dim)                                           //### 단어장을 임베딩시킨다
         self.embed.weight.data.copy_(vocab_built.vectors)                                              //Word2Vec으로 학습한 임베딩벡터값을 가져온다.
         self.convs = nn.ModuleList([nn.Conv2d(1, dim_channel, (w, emb_dim)) for w in kernel_wins])     //nn.Conv2d 함수에 임베딩결과를 전달해 필터생성
         self.relu = nn.ReLU()                
@@ -283,7 +283,6 @@ model = TextCNN(vocab, 100, 10, [3, 4, 5], 2).to(device)           // TextCNN함
 print(model)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 optimizer = optim.Adam(model.parameters(), lr=0.001)
-
 best_test_acc = -1
 for epoch in range(1, 3+1):
     tr_loss, tr_acc = train(model, device, train_iter, optimizer)   // 설정값으로 학습후 오차, 정확도 반환 ###
