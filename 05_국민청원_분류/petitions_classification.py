@@ -279,53 +279,38 @@ print('임베딩 벡터의 개수와 차원 : {} '.format(TEXT.vocab.vectors.sha
 
 
 # # 2.6 TextCNN
-
 # [TextCNN 모델링]
-
 # In[ ]:
-
-
 import torch.nn as nn   
 import torch.optim as optim 
 import torch.nn.functional as F 
 
 class TextCNN(nn.Module): 
-    
-    def __init__(self, vocab_built, emb_dim, dim_channel, kernel_wins, num_class):
+    def __init__(self, vocab_built, emb_dim, dim_channel, kernel_wins, num_class): //vocab_built부터 train데이터로 생성한 단어장, 임베딩벡터의크기, 피처맵이후 생성되는 채널의수, 필터의크기, output클래스의개수
         
         super(TextCNN, self).__init__()
-        
         self.embed = nn.Embedding(len(vocab_built), emb_dim)
-        self.embed.weight.data.copy_(vocab_built.vectors)      
-    
-        self.convs = nn.ModuleList([nn.Conv2d(1, dim_channel, (w, emb_dim)) for w in kernel_wins])
+        self.embed.weight.data.copy_(vocab_built.vectors)                                              //Word2Vec으로 학습한 임베딩벡터값을 가져온다.
+        self.convs = nn.ModuleList([nn.Conv2d(1, dim_channel, (w, emb_dim)) for w in kernel_wins])     //nn.Conv2d 함수에 임베딩결과를 전달해 필터생성
         self.relu = nn.ReLU()                
-        self.dropout = nn.Dropout(0.4)         
-        self.fc = nn.Linear(len(kernel_wins)*dim_channel, num_class)     
+        self.dropout = nn.Dropout(0.4)                                  //과적합방지 드롭아웃
+        self.fc = nn.Linear(len(kernel_wins)*dim_channel, num_class)    //클래스에대한 Score생성하기위해 fully connected layer생성     
         
-    def forward(self, x):  
-      
-        emb_x = self.embed(x)           
-        emb_x = emb_x.unsqueeze(1)  
-
-        con_x = [self.relu(conv(emb_x)) for conv in self.convs]       
-
-        pool_x = [F.max_pool1d(x.squeeze(-1), x.size()[2]) for x in con_x]    
+    def forward(self, x):              //TextCNN의 설계한모델에 데이터를 입력했을때 Output계산하는 과정
+        emb_x = self.embed(x)          //x로받은 임베딩정보 전달
+        emb_x = emb_x.unsqueeze(1)     //emb_x의 첫번째축에 차원을 추가한다. 이유는 2차원 텍스트데이터를 모델에 이미지처럼 입력하려면 원을 추가하여 3차원형태로 변환해야하기떄문
+        con_x = [self.relu(conv(emb_x)) for conv in self.convs]           //self.convs 에는 filter세개가 리스트형태로 있음. 리스트 각원소에대한 output으로 세가지 필터를 각각통과한 결과인 피처맵 3개가 con_x에 리스트형태로 저장됨.
+        pool_x = [F.max_pool1d(x.squeeze(-1), x.size()[2]) for x in con_x]      //맥스풀링을 진행해 리스트형태로 이루어진 풀링레이어를 생성한다.
         
-        fc_x = torch.cat(pool_x, dim=1) 
-        fc_x = fc_x.squeeze(-1)       
+        fc_x = torch.cat(pool_x, dim=1)    //1차원풀링벡터 3개를 concat하여 1개의 fully connected layer생성 
+        fc_x = fc_x.squeeze(-1)           //10*3 크기를 30*1형태인 fully connected layer생성
         fc_x = self.dropout(fc_x)         
-
-        logit = self.fc(fc_x)     
+        logit = self.fc(fc_x)         //30*1크기의 fc_x를 fc함수에 통과시켜 1*2크기인 fully connected layer의 propagation logit값을 연산함
         
         return logit
 
-
 # [모델 학습 함수 정의]
-
 # In[ ]:
-
-
 def train(model, device, train_itr, optimizer):
     
     model.train()                               
@@ -356,17 +341,13 @@ def train(model, device, train_itr, optimizer):
 
 
 # [모델 평가 함수 정의]
-
 # In[ ]:
-
-
 def evaluate(model, device, itr):
     
     model.eval()
     corrects, test_loss = 0.0, 0
 
     for batch in itr:
-        
         text = batch.text
         target = batch.label
         text = torch.transpose(text, 0, 1)
@@ -387,10 +368,7 @@ def evaluate(model, device, itr):
 
 
 # [모델 학습 및 성능 확인]
-
 # In[ ]:
-
-
 model = TextCNN(vocab, 100, 10, [3, 4, 5], 2).to(device)
 print(model)
 
