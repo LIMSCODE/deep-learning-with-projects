@@ -1,29 +1,25 @@
 #!/usr/bin/env python
 # coding: utf-8
-## # 국민청원 분류하기 - 주목받을만한글 분류 
-- 높은 청원참여인원을 기록한 글들의 특징을 학습하여, 그 글들과 유사성을 계산하여 주목받을만한 글인지 판단 
+## # 국민청원 분류하기  
+- 높은 청원참여인원을 기록한 글들의 특징을 학습, 그 글들과 유사성을 계산하여 주목받을만한 글인지 판단 
 - 청원참여인원이 1천명 넘을것으로 분류된 청원을 결과로 찾음
-
 ## # 과정
-- 크롤링 (제목,참여인원,카테고리,청원시작,마감일,청원내용)
-- 데이터전처리 (공백,특수문자제거)
-
-- 토크나이징
+1. 크롤링 (제목,참여인원,카테고리,청원시작,마감일,청원내용)
+2. 데이터전처리 (공백,특수문자제거)
+3.  토크나이징
 Konlpy - 형태소분석패키지 , Okt클래스 선정, 제목을 형태소단위로 토크나이징(좋,습니다), 내용을 명사단위로 토크나이징하여 df에저장
 df_drop - 분석에필요한 df[final]과 label
-
-- 변수생성
+4. 변수생성
 청원참여인원이 1천명이상이면 LABEL에 YES붙임, 아니면 NO붙임
-
-- 단어임베딩 (Word2Vec)  (국민청원 10881건에대한 토큰43937개의 100차원임베딩)
+5. 단어임베딩 (Word2Vec)  (국민청원 10881건에대한 토큰43937개의 100차원임베딩)
 문자를 숫자롭 변환하여 컴퓨터가 이해하도록 처리
 토큰에인덱스부여하는방법-단어토큰을 숫자로치환한것뿐이므로 토큰간 의미,유사도 파악이어려움/ One-Hot Encoding -성능안좋음
 Word2Vec 
 - 단어의 의미,유사도반영하여 벡터로 표현 / 특정토큰 근처의 토큰들을 비슷한 위치의 벡터로 표현한다.
 - df[total_token]에서 embedding_model불러옴 / embedding_model.wv.most_similar("음주운전") 으로 유사값 찾음
+6. 실험설계 (학습,평가)
 
-- 실험설계 (학습,평가)
-    
+
 # # 2.1 크롤링  (제목,참여인원,카테고리,청원시작,마감일,청원내용)
 # [크롤링]
 # In[ ]:
@@ -32,24 +28,19 @@ import numpy as np
 import requests
 from bs4 import BeautifulSoup 
 import time
-
-result = pd.DataFrame()                                    
-
+result = pd.DataFrame()      // ###                              
 for i in range(584274, 595226):
     URL = "http://www1.president.go.kr/petitions/"+str(i)
     response = requests.get(URL)    
     html = response.text          
-    
     soup = BeautifulSoup(html, 'html.parser')           
     title = soup.find('h3', class_='petitionsView_title')
     count = soup.find('span', class_='counter')           
-
     for content in soup.select('div.petitionsView_write > div.View_write'):
         content                                         
     a=[]
     for tag in soup.select('ul.petitionsView_info_list > li'): 
         a.append(tag.contents[1])
-
     if len(a) != 0:
         df1=pd.DataFrame({ 'start' : [a[1]],                
                            'end' : [a[2]],                     
@@ -60,14 +51,12 @@ for i in range(584274, 595226):
                          })
         result=pd.concat([result, df1])                        
         result.index = np.arange(len(result))             
-        
     if i % 60 == 0:                                        
         print("Sleep 90seconds. Count:" + str(i)           
               +",  Local Time:"+ time.strftime('%Y-%m-%d', time.localtime(time.time()))
               +" "+ time.strftime('%X', time.localtime(time.time()))
               +",  Data Length:"+ str(len(result)))        
         time.sleep(90) 
-
 # [크롤링 데이터 확인]
 # In[ ]:
 print(result.shape)
@@ -77,47 +66,41 @@ df.head()
 # In[37]:
 df.to_csv('data/crawling.csv', index = False, encoding = 'utf-8-sig')
 
-
 # # 2.2 데이터 전처리 (공백,특수문자제거)
 # In[ ]:
 df.loc[1]['content']  # 전처리 전
 # [전처리]
 # In[ ]:
 import re
-
 def remove_white_space(text):
     text = re.sub(r'[\t\r\n\f\v]', ' ', str(text))
     return text
 def remove_special_char(text):
     text = re.sub('[^ ㄱ-ㅣ가-힣 0-9]+', ' ', str(text))
     return text
-
 df.title = df.title.apply(remove_white_space)
 df.title = df.title.apply(remove_special_char)
 df.content = df.content.apply(remove_white_space)
 df.content = df.content.apply(remove_special_char)
-
 # In[ ]:
 df.loc[1]['content']  # 전처리 후
 
-# # 2.3 토크나이징 및 변수 생성
+
+# # 2.3 토크나이징 및 변수 생성 - 크롤링,전처리한것을 형태소로 토크나이징함- df.drop ### 
 # [토크나이징]
 - Konlpy - 형태소분석패키지 , Okt클래스 선정, 제목을 형태소단위로 토크나이징(좋,습니다), 내용을 명사단위로 토크나이징하여 df에저장
 - df_drop - 분석에필요한 df[final]과 label 만 가져옴
-
 # In[ ]:
 from konlpy.tag import Okt
 okt = Okt()
 df['title_token'] = df.title.apply(okt.morphs)
 df['content_token'] = df.content.apply(okt.nouns)
-
 # [파생변수 생성] - 변수생성
 # In[ ]:
-df['token_final'] = df.title_token + df.content_token
+df['token_final'] = df.title_token + df.content_token  // ###
 df['count'] = df['count'].replace({',' : ''}, regex = True).apply(lambda x : int(x))
 print(df.dtypes)
 df['label'] = df['count'].apply(lambda x: 'Yes' if x>=1000 else 'No')
-
 # In[ ]:
 df_drop = df[['token_final', 'label']]
 # In[ ]:
@@ -127,7 +110,7 @@ df_drop.head()
 df_drop.to_csv('data/df_drop.csv', index = False, encoding = 'utf-8-sig')
 
 
-# # 2.4 단어 임베딩 -Word2Vec 이용하여 문자를 숫자벡터로 변환
+# # 2.4 단어 임베딩 -Word2Vec 이용하여 문자를 숫자벡터로 변환 ###
 # [단어 임베딩]  (국민청원 10881건에대한 토큰43937개의 100차원임베딩)
 # In[ ]:
 - 문자를 숫자로 변환하여 컴퓨터가 이해하도록 처리
@@ -135,9 +118,7 @@ df_drop.to_csv('data/df_drop.csv', index = False, encoding = 'utf-8-sig')
 - Word2Vec 
 - 단어의 의미,유사도반영하여 벡터로 표현 / 특정토큰 근처의 토큰들을 비슷한 위치의 벡터로 표현한다.
 - df[total_token]에서 embedding_model불러옴 / embedding_model.wv.most_similar("음주운전") 으로 유사값 찾음
-
 from gensim.models import Word2Vec
-
 embedding_model = Word2Vec(df_drop['token_final'], 
                            sg = 1, # skip-gram
                            size = 100, 
@@ -152,13 +133,14 @@ print(model_result)
 # [임베딩 모델 저장 및 로드]
 # In[ ]:
 from gensim.models import KeyedVectors
-embedding_model.wv.save_word2vec_format('data/petitions_tokens_w2v') # 모델 저장
+embedding_model.wv.save_word2vec_format('data/petitions_tokens_w2v') // ### 임베딩모델을 로컬에 petiton_token~이름으로 저장
 loaded_model = KeyedVectors.load_word2vec_format('data/petitions_tokens_w2v') # 모델 로드
-
 model_result = loaded_model.most_similar("음주운전")
 print(model_result)
+-> [('음주',0.86), ('무면허', 0.81) ,...]
 
-
+//여기까지가 크롤링,전처리하여 공백,특수문자없앰,형태소 토크나이징, 단어 임베딩-Word2Vec 이용하여 문자를 숫자벡터로 변환 ###
+//============================================================================
 # # 2.5 실험 설계
 # [데이터셋 분할 및 csv저장]
 # In[ ]:
@@ -166,7 +148,7 @@ from numpy.random import RandomState
 rng = RandomState()
 tr = df_drop.sample(frac=0.8, random_state=rng)        //데이터를 tran, validation set으로 랜덤하게 분할한다. 전체데이터의 80%를 train set으로 지정, 20%를 validation set으로 지정
 val = df_drop.loc[~df_drop.index.isin(tr.index)]
-tr.to_csv('data/train.csv', index=False, encoding='utf-8-sig')        //csv로  tran, validation set 저장 
+tr.to_csv('data/train.csv', index=False, encoding='utf-8-sig')        //csv로 tran, validation set 저장 
 val.to_csv('data/validation.csv', index=False, encoding='utf-8-sig')
 
 # [Field클래스 정의]
@@ -211,7 +193,6 @@ train_iter, validation_iter = BucketIterator.splits(        //train,validationse
     sort = False
 )
 print('임베딩 벡터의 개수와 차원 : {} '.format(TEXT.vocab.vectors.shape))
-
 
 
 # # 2.6 TextCNN  - 단어장 임베딩, 필터통과시켜 피처맵만듬, 풀링레이어생성, logit값반환
